@@ -1,0 +1,62 @@
+bash -lc cat > /mnt/data/create_expenses.py <<'PY'
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.formatting.rule import ColorScaleRule
+from openpyxl.chart import PieChart, Reference
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.utils import get_column_letter
+from datetime import date, timedelta
+
+out='/mnt/data/Daily_Expenses_Monthly.xlsx'
+wb=Workbook(); ws=wb.active; ws.title='Daily Expenses'; sm=wb.create_sheet('Monthly Summary')
+navy='17365D'; teal='0F6B78'; aqua='D9EAF0'; light='F5F8FA'; gold='F4B183'; white='FFFFFF'; gray='666666'; blue='0000FF'; black='000000'
+
+ws.sheet_view.showGridLines=False
+ws.merge_cells('A1:F1'); ws['A1']='💰 Daily Expenses Tracker'; ws['A1'].font=Font(size=18,bold=True,color=white); ws['A1'].fill=PatternFill('solid',fgColor=navy); ws['A1'].alignment=Alignment(horizontal='center'); ws.row_dimensions[1].height=30
+ws.merge_cells('A2:F2'); ws['A2']='နေ့စဉ်အသုံးစရိတ်များကို ရက်စွဲ၊ အမျိုးအစားနှင့် ပမာဏအလိုက် မှတ်တမ်းတင်ပါ'; ws['A2'].font=Font(italic=True,color=gray); ws['A2'].alignment=Alignment(horizontal='center')
+headers=['📅 Date','🏷️ Category','📝 Description','💵 Amount (THB)','💳 Payment','📌 Note']
+for c,h in enumerate(headers,1):
+    cell=ws.cell(4,c,h); cell.font=Font(bold=True,color=white); cell.fill=PatternFill('solid',fgColor=teal); cell.alignment=Alignment(horizontal='center')
+# blank rows for user entry
+for r in range(5,105):
+    ws.cell(r,1).number_format='dd-mmm-yyyy'; ws.cell(r,4).number_format='฿#,##0.00;[Red](฿#,##0.00);-'
+    for c in range(1,7): ws.cell(r,c).font=Font(color=blue)
+# table
+tab=Table(displayName='ExpensesTable', ref='A4:F104'); tab.tableStyleInfo=TableStyleInfo(name='TableStyleMedium2',showRowStripes=True,showFirstColumn=False,showLastColumn=False); ws.add_table(tab)
+# dropdowns
+cats='🍚 Food,🚌 Transport,🛒 Shopping,🏠 Household,💡 Utilities,💊 Health,🎉 Entertainment,📌 Other'
+dv=DataValidation(type='list', formula1='"'+cats+'"'); ws.add_data_validation(dv); dv.add('B5:B104')
+pay=DataValidation(type='list', formula1='"💵 Cash,💳 Card,📱 Transfer"'); ws.add_data_validation(pay); pay.add('E5:E104')
+for col,w in {'A':16,'B':22,'C':30,'D':18,'E':18,'F':30}.items(): ws.column_dimensions[col].width=w
+ws.freeze_panes='A5'
+
+sm.sheet_view.showGridLines=False
+sm.merge_cells('A1:N1'); sm['A1']='📊 Monthly Expenses Summary'; sm['A1'].font=Font(size=18,bold=True,color=white); sm['A1'].fill=PatternFill('solid',fgColor=navy); sm['A1'].alignment=Alignment(horizontal='center'); sm.row_dimensions[1].height=30
+sm['A3']='📆 Year'; sm['B3']=2026; sm['B3'].font=Font(color=blue,bold=True)
+sm['A4']='🎯 Annual Total'; sm['B4']='=SUM(B7:B18)'; sm['B4'].number_format='฿#,##0.00;[Red](฿#,##0.00);-'; sm['B4'].font=Font(bold=True,color=black)
+sm['A6']='Month'; sm['B6']='💰 Monthly Total (THB)'
+for c in range(1,3): sm.cell(6,c).fill=PatternFill('solid',fgColor=teal); sm.cell(6,c).font=Font(bold=True,color=white)
+months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+for i,m in enumerate(months,7):
+    sm.cell(i,1,m)
+    monthnum=i-6
+    sm.cell(i,2, f'=SUMIFS(\'Daily Expenses\'!$D$5:$D$104,\'Daily Expenses\'!$A$5:$A$104,">="&DATE($B$3,{monthnum},1),\'Daily Expenses\'!$A$5:$A$104,"<"&EDATE(DATE($B$3,{monthnum},1),1))')
+    sm.cell(i,2).number_format='฿#,##0.00;[Red](฿#,##0.00);-'; sm.cell(i,2).font=Font(color=black)
+# category summary
+sm['D6']='Category'; sm['E6']='💵 Total (THB)'
+for c in range(4,6): sm.cell(6,c).fill=PatternFill('solid',fgColor=teal); sm.cell(6,c).font=Font(bold=True,color=white)
+catlist=['🍚 Food','🚌 Transport','🛒 Shopping','🏠 Household','💡 Utilities','💊 Health','🎉 Entertainment','📌 Other']
+for i,cat in enumerate(catlist,7):
+    sm.cell(i,4,cat); sm.cell(i,5,f'=SUMIFS(\'Daily Expenses\'!$D$5:$D$104,\'Daily Expenses\'!$B$5:$B$104,D{i},\'Daily Expenses\'!$A$5:$A$104,">="&DATE($B$3,1,1),\'Daily Expenses\'!$A$5:$A$104,"<"&DATE($B$3+1,1,1))'); sm.cell(i,5).number_format='฿#,##0.00;[Red](฿#,##0.00);-'
+sm.conditional_formatting.add('B7:B18',ColorScaleRule(start_type='min',start_color='FFFFFF',end_type='max',end_color='63C7B2'))
+# chart
+chart=PieChart(); chart.title='Expenses by Category'; data=Reference(sm,min_col=5,min_row=6,max_row=14); labels=Reference(sm,min_col=4,min_row=7,max_row=14); chart.add_data(data,titles_from_data=True); chart.set_categories(labels); chart.height=7.5; chart.width=10; sm.add_chart(chart,'G4')
+for col,w in {'A':16,'B':24,'C':3,'D':24,'E':20}.items(): sm.column_dimensions[col].width=w
+sm.freeze_panes='A6'
+wb.calculation.fullCalcOnLoad=True; wb.calculation.forceFullCalc=True; wb.calculation.calcMode='auto'
+wb.save(out)
+print(out)
+PY
+python /mnt/data/create_expenses.py
+artifact-validator /mnt/data/Daily_Expenses_Monthly.xlsx
